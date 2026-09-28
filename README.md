@@ -1,33 +1,33 @@
-# Operating systems labs
+# Linux systems programming
 
-Linux coursework exploring communication between processes, synchronization between threads, and an in-memory file system built on the kernel's VFS interface.
+Processes exchange messages, threads share work, and a kernel module exposes files through Linux VFS. These NCKU operating-systems labs implement those mechanisms in C, using the course templates.
 
-`C` · `POSIX IPC` · `pthreads` · `procfs` · `Linux kernel modules`
+`C` · `POSIX IPC` · `pthreads` · `procfs` · `Linux VFS`
 
-## Lab map
+## What the labs do
 
-| Lab | Implementation | Code |
+| Lab | Observable behavior | Implementation |
 | --- | --- | --- |
-| 1 | Sender and receiver using message queues or shared memory, coordinated by named semaphores | [lab1-ipc](lab1-ipc) |
-| 3 | Spinlocks, threaded matrix multiplication, and thread information exposed through procfs | [lab3-threads](lab3-threads) |
-| 4 | An in-memory file system with superblock, inode, directory, and file operations | [lab4-osfs](lab4-osfs) |
+| 1 — inter-process communication | A sender transfers text lines to a receiver through either a message queue or shared memory | [lab1-ipc](lab1-ipc) |
+| 3 — threads and synchronization | Threads update a shared counter, partition matrix work, and expose thread information through procfs | [lab3-threads](lab3-threads) |
+| 4 — in-memory filesystem | Files and directories use VFS operations with memory-backed storage, including reads/writes across block boundaries | [lab4-osfs](lab4-osfs) |
 
-Only Labs 1, 3, and 4 are included. These are coursework implementations based on the course templates.
+The repository contains **Labs 1, 3, and 4**, not the complete course. The Lab 1 sender and receiver compiled on Ubuntu 22.04 under WSL in the local check recorded on 2026-09-28. Runtime behavior and the kernel modules were not validated in that check; no speedup or official score is claimed.
 
-## Lab 1: two IPC paths
-
-The sender reads lines from a text file. A mode flag selects a POSIX message queue or a shared-memory mailbox. Named semaphores coordinate the sender and receiver, and the programs record communication time.
+## Lab 1: one transfer, two IPC mechanisms
 
 ```mermaid
 flowchart LR
-    A[Input file] --> B[Sender]
-    B --> C[Message queue: mode 1]
-    B --> D[Shared memory: mode 2]
+    A[Text file] --> B[Sender]
+    B --> C[Mode 1: message queue]
+    B --> D[Mode 2: shared-memory mailbox]
     C --> E[Receiver]
     D --> E
     F[Named semaphores] -. coordinate .-> B
     F -. coordinate .-> E
 ```
+
+The same sender/receiver interface selects either path with a mode flag. Named semaphores coordinate the programs, which also record communication time.
 
 Build on Linux:
 
@@ -37,32 +37,36 @@ gcc -O3 -Wall sender.c -o sender -pthread -lrt
 gcc -O3 -Wall receiver.c -o receiver -pthread -lrt
 ```
 
-Run each program in a separate terminal using the same mode. Start the sender first, then the receiver:
+Start the sender, then the receiver in another terminal:
 
 ```bash
+# Terminal 1
 ./sender 1 input.txt
+# Terminal 2
 ./receiver 1
 ```
 
-Use `2` in both commands to select shared memory. Run one pair at a time: the programs use fixed IPC object names, so concurrent runs can interfere with each other.
+Use `2` in both commands for shared memory. Run one pair at a time: fixed IPC object names can make concurrent runs interfere.
 
-## Lab 3: synchronization and thread work
+## Lab 3: shared state and parallel work
 
-- `1_1`: a shared counter protected by a pthread spinlock.
-- `1_2`: a custom spinlock using the x86 `xchg` instruction.
-- `2_1_2_2`: single-thread and two-thread matrix multiplication variants.
-- `3_1` and `3_2`: row-partitioned matrix work with kernel modules that expose thread information through procfs.
+| Directory | Mechanism |
+| --- | --- |
+| `1_1` | Shared counter protected by a pthread spinlock |
+| `1_2` | Custom spinlock using x86 `xchg` |
+| `2_1_2_2` | Single-thread and two-thread matrix multiplication |
+| `3_1`, `3_2` | Row-partitioned matrix work and procfs kernel modules |
 
-The `3_2` source references `3_2_Config.h`, which was not found with the original files. It also expects local matrix inputs. That variant is not a self-contained runnable example in this snapshot. Some matrix variants accumulate into `malloc`-allocated output without explicitly zeroing it; their numerical results need review before any performance comparison.
+These exercises separate synchronization from work partitioning. They do not establish that two threads are always faster or that the implementations are race-free.
 
-## Lab 4: in-memory file system
+The `3_2` variant references a missing `3_2_Config.h` and local matrix inputs, so it is not self-contained. Some matrix variants accumulate into `malloc`-allocated output without explicitly zeroing it. Check numerical correctness before comparing execution times.
 
-The `osfs` module implements file and directory operations through Linux VFS structures. File storage uses memory-backed blocks, including reads and writes across block boundaries. Its contents are not durable disk storage.
+## Lab 4: files without disk persistence
 
-The [original test notes](lab4-osfs/docs/original-test-notes.md) describe the course's mount and file-operation checks. Building requires kernel headers that match the target kernel. Load and test the module only in a disposable Linux VM; this repository does not require loading a module on the host computer.
+The `osfs` module connects superblock, inode, directory, and file operations to Linux VFS. Memory-backed blocks hold file contents, including data spanning multiple blocks. Contents are not durable disk storage.
 
-## Validation limits
+The [original test notes](lab4-osfs/docs/original-test-notes.md) describe mount and file-operation checks. Building needs kernel headers matching the target kernel. Load and test the module only in a disposable Linux VM, not on the host computer.
 
-On 2026-09-28, both Lab 1 programs compiled on Ubuntu 22.04 under WSL using the commands above. No concurrent IPC run or kernel module loading was performed during packaging.
+## Environment and validation limits
 
-Source inspection alone does not establish race freedom, speedup, or kernel stability. The custom assembly is architecture-dependent, and kernel APIs may differ between releases. No benchmark improvement or official course score is claimed.
+Lab 1's build check did not include a concurrent IPC run. Kernel modules were not loaded. The custom assembly is architecture-dependent, and kernel APIs can differ between releases. Source inspection and archived answers alone do not prove runtime correctness, performance improvement, or kernel stability.
