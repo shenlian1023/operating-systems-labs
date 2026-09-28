@@ -1,0 +1,16 @@
+.idea/
+.vscode/
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+Module.symvers
+modules.order
+.tmp_versions/
+sender
+receiver
+*.exe
+*.log
+.env
+.env.*
