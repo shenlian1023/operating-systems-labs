@@ -4,13 +4,15 @@ Processes exchange messages, threads share work, and a kernel module exposes fil
 
 `C` · `POSIX IPC` · `pthreads` · `procfs` · `Linux VFS`
 
+[Lab map](#what-the-labs-do) · [IPC](#lab-1-one-transfer-two-ipc-mechanisms) · [Threads](#lab-3-shared-state-and-parallel-work) · [Filesystem](#lab-4-files-without-disk-persistence)
+
 ## What the labs do
 
 | Lab | Observable behavior | Implementation |
 | --- | --- | --- |
-| 1 — inter-process communication | A sender transfers text lines to a receiver through either a message queue or shared memory | [lab1-ipc](lab1-ipc) |
-| 3 — threads and synchronization | Threads update a shared counter, partition matrix work, and expose thread information through procfs | [lab3-threads](lab3-threads) |
-| 4 — in-memory filesystem | Files and directories use VFS operations with memory-backed storage, including reads/writes across block boundaries | [lab4-osfs](lab4-osfs) |
+| 1: inter-process communication | A sender transfers text lines to a receiver through either a message queue or shared memory | [lab1-ipc](lab1-ipc) |
+| 3: threads and synchronization | Threads update a shared counter, partition matrix work, and expose thread information through procfs | [lab3-threads](lab3-threads) |
+| 4: in-memory filesystem | Files and directories use VFS operations with memory-backed storage, including reads/writes across block boundaries | [lab4-osfs](lab4-osfs) |
 
 The repository contains **Labs 1, 3, and 4**, not the complete course. The Lab 1 sender and receiver compiled on Ubuntu 22.04 under WSL in the local check recorded on 2026-09-28. Runtime behavior and the kernel modules were not validated in that check; no speedup or official score is claimed.
 
