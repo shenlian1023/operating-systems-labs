@@ -4,7 +4,7 @@ Processes exchange messages, threads share work, and a kernel module exposes fil
 
 `C` · `POSIX IPC` · `pthreads` · `procfs` · `Linux VFS`
 
-[Lab map](#what-the-labs-do) · [IPC](#lab-1-one-transfer-two-ipc-mechanisms) · [Threads](#lab-3-shared-state-and-parallel-work) · [Filesystem](#lab-4-files-without-disk-persistence)
+[Lab map](#what-the-labs-do) · [IPC](#lab-1-one-transfer-two-ipc-mechanisms) · [Threads](#lab-3-shared-state-and-parallel-work) · [Filesystem](#lab-4-files-without-disk-persistence) · [Implementation notes](docs/implementation.md)
 
 ## What the labs do
 
@@ -29,7 +29,18 @@ flowchart LR
     F -. coordinate .-> E
 ```
 
-The same sender/receiver interface selects either path with a mode flag. Named semaphores coordinate the programs, which also record communication time.
+The same sender/receiver interface selects either path with a mode flag. Named semaphores coordinate the programs. Timing brackets the send or receive call after the semaphore wait, so the recorded values exclude synchronization waiting and do not measure end-to-end transfer latency.
+
+The [sender](lab1-ipc/sender.c) creates a semaphore for each side of the handoff (original inline comments omitted):
+
+```c
+g_sem_sender   = sem_open(SEM_SENDER_NAME,   O_CREAT, 0600, 1);
+if (g_sem_sender == SEM_FAILED) die("sem_open sender");
+g_sem_receiver = sem_open(SEM_RECEIVER_NAME, O_CREAT, 0600, 0);
+if (g_sem_receiver == SEM_FAILED) die("sem_open receiver");
+```
+
+The receiver returns permission after consuming an ordinary message. Starting the sender semaphore at 1 and the receiver semaphore at 0 creates a one-message handshake, which prevents a normal single-pair run from overwriting an unread shared-memory message. This is an exercise in process coordination and measurement boundaries. See the [implementation notes](docs/implementation.md) for the handshake, the `xchg` lock, and VFS read/write addressing.
 
 Build on Linux:
 
