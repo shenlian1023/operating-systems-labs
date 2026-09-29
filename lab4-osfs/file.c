@@ -22,7 +22,13 @@ static ssize_t osfs_read(struct file *filp, char __user *buf, size_t len, loff_t
     struct osfs_sb_info *sb_info = inode->i_sb->s_fs_info;
     void *data_block;
     ssize_t bytes_read;
-    loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * BLOCK_SIZE);
+    loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE);
+    const loff_t capacity = MAX_EXTENTS * MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE;
+    if (*ppos < 0)
+        return -EINVAL;
+    if (!len || *ppos >= capacity)
+        return 0;
+    len = min_t(size_t, len, capacity - *ppos);
     // If the file has not been allocated a data block, it indicates the file is empty
     if (osfs_inode->extents[0].block_count == 0)
     {
@@ -43,26 +49,26 @@ static ssize_t osfs_read(struct file *filp, char __user *buf, size_t len, loff_t
     int lens[MAX_EXTENTS], lens_index = 1;
     lens[0] = len;
     // Step3: Limit the write length to fit within one data block
-    if(offset + len > BLOCK_SIZE * MAX_CONTINUE_BLOCKS)
+    if(offset + len > OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS)
     {
-        lens[0] = BLOCK_SIZE * MAX_CONTINUE_BLOCKS - offset;
+        lens[0] = OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS - offset;
         len -= lens[0];
         while(lens_index + index < MAX_EXTENTS && len > 0)
         {
-            lens[lens_index] = min(len, BLOCK_SIZE * MAX_CONTINUE_BLOCKS);
+            lens[lens_index] = min(len, OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS);
             len -= lens[lens_index];
             lens_index++;
         }
     }
     
-    data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * BLOCK_SIZE + offset;
+    data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * OSFS_BLOCK_SIZE + offset;
     if (copy_to_user(buf, data_block, lens[0]))
         return -EFAULT;
     *ppos += lens[0];
     buf += lens[0];
     for(int index_lens = 1; index_lens < lens_index; index_lens++)
     {
-        data_block = sb_info->data_blocks + osfs_inode->extents[index + index_lens].start_block * BLOCK_SIZE;
+        data_block = sb_info->data_blocks + osfs_inode->extents[index + index_lens].start_block * OSFS_BLOCK_SIZE;
         if (copy_to_user(buf, data_block, lens[index_lens]))
             return -EFAULT;
         *ppos += lens[index_lens];
@@ -95,11 +101,24 @@ static ssize_t osfs_write(struct file *filp, const char __user *buf, size_t len,
     void *data_block;
     ssize_t bytes_written;
     int ret, lens_index = 1;
-    loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * BLOCK_SIZE);
+    loff_t start_pos = *ppos;
+    const loff_t capacity = MAX_EXTENTS * MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE;
+    loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE);
     int lens[MAX_EXTENTS];
+
+    if (*ppos < 0)
+        return -EINVAL;
+    if (!len)
+        return 0;
+    if (*ppos >= capacity)
+        return -EFBIG;
+    /* Report a short write rather than claiming bytes beyond capacity. */
+    len = min_t(size_t, len, capacity - *ppos);
     
     if(osfs_inode->extents[index].block_count == 0){
         ret = osfs_alloc_data_block(sb_info, &osfs_inode->extents[index].start_block);
+        if (ret)
+            return ret;
         osfs_inode->extents[index].block_count = MAX_CONTINUE_BLOCKS;
         osfs_inode->extent_count++;
     }
@@ -107,19 +126,19 @@ static ssize_t osfs_write(struct file *filp, const char __user *buf, size_t len,
     bytes_written = len;
     lens[0] = len;
     // Step3: Limit the write length to fit within one data block
-    if(offset + len > BLOCK_SIZE * MAX_CONTINUE_BLOCKS)
+    if(offset + len > OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS)
     {
-        lens[0] = BLOCK_SIZE * MAX_CONTINUE_BLOCKS - offset;
+        lens[0] = OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS - offset;
         len -= lens[0];
         while(lens_index + index < MAX_EXTENTS && len > 0)
         {
-            lens[lens_index] = min(len, BLOCK_SIZE * MAX_CONTINUE_BLOCKS);
+            lens[lens_index] = min(len, OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS);
             len -= lens[lens_index];
             lens_index++;
         }
     }
     
-    data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * BLOCK_SIZE + offset;
+    data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * OSFS_BLOCK_SIZE + offset;
     if(copy_from_user(data_block, buf, lens[0])) return -EFAULT;
     *ppos += lens[0];
     buf += lens[0];
@@ -130,19 +149,26 @@ static ssize_t osfs_write(struct file *filp, const char __user *buf, size_t len,
     }
     else
     {
-        osfs_inode->extents[index].file_offset = BLOCK_SIZE * MAX_CONTINUE_BLOCKS;
+        osfs_inode->extents[index].file_offset = OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS;
     }
     
     for(int index_lens = 1; index_lens < lens_index; index_lens++)
     {
         if(osfs_inode->extents[index + index_lens].block_count == 0){
             ret = osfs_alloc_data_block(sb_info, &osfs_inode->extents[index + index_lens].start_block);
+            if (ret) {
+                bytes_written = *ppos - start_pos;
+                goto update_metadata;
+            }
             osfs_inode->extents[index + index_lens].block_count = MAX_CONTINUE_BLOCKS;
             osfs_inode->extent_count++;
         }
         // Step4: Write data from user space to the data block
-        data_block = sb_info->data_blocks + osfs_inode->extents[index + index_lens].start_block * BLOCK_SIZE;
-        if(copy_from_user(data_block, buf, lens[index_lens])) return -EFAULT;
+        data_block = sb_info->data_blocks + osfs_inode->extents[index + index_lens].start_block * OSFS_BLOCK_SIZE;
+        if(copy_from_user(data_block, buf, lens[index_lens])) {
+            bytes_written = *ppos - start_pos;
+            goto update_metadata;
+        }
         *ppos += lens[index_lens];
         buf += lens[index_lens];
         
@@ -152,10 +178,11 @@ static ssize_t osfs_write(struct file *filp, const char __user *buf, size_t len,
         }
         else
         {
-            osfs_inode->extents[index + index_lens].file_offset = BLOCK_SIZE * MAX_CONTINUE_BLOCKS;
+            osfs_inode->extents[index + index_lens].file_offset = OSFS_BLOCK_SIZE * MAX_CONTINUE_BLOCKS;
         }
     }
     
+update_metadata:
     // 1. 使用核心 API 設定 VFS inode 的時間
     struct timespec64 now = current_time(inode);
     inode_set_mtime_to_ts(inode, now);

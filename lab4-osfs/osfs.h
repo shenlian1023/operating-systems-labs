@@ -11,13 +11,11 @@
 #include <linux/module.h>
 
 #define OSFS_MAGIC 0x051AB520
-#ifndef BLOCK_SIZE
-#define BLOCK_SIZE 4096
-#endif      // Each data block size is 4KB, this data need >= sizeof(struct osfs_dir_entry)
+#define OSFS_BLOCK_SIZE 4096      // Each data block size is 4KB, this data need >= sizeof(struct osfs_dir_entry)
 #define INODE_COUNT 20         // Maximum of 20 inodes in the filesystem
 #define DATA_BLOCK_COUNT 20    // Assume there are 20 data blocks
 #define MAX_FILENAME_LEN 255
-#define MAX_DIR_ENTRIES (BLOCK_SIZE / sizeof(struct osfs_dir_entry))
+#define MAX_DIR_ENTRIES (OSFS_BLOCK_SIZE / sizeof(struct osfs_dir_entry))
 
 #define BITMAP_SIZE(bits) (((bits) + BITS_PER_LONG - 1) / BITS_PER_LONG)
 

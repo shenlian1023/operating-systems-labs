@@ -46,7 +46,7 @@ int osfs_fill_super(struct super_block *sb, void *data, int silent)
                         INODE_BITMAP_SIZE * sizeof(unsigned long) +
                         BLOCK_BITMAP_SIZE * sizeof(unsigned long) +
                         INODE_COUNT * sizeof(struct osfs_inode) +
-                        DATA_BLOCK_COUNT * BLOCK_SIZE;
+                        DATA_BLOCK_COUNT * OSFS_BLOCK_SIZE;
 
     // Allocate memory for superblock information and related structures
     memory_region = vmalloc(total_memory_size);
@@ -58,7 +58,7 @@ int osfs_fill_super(struct super_block *sb, void *data, int silent)
     // Initialize superblock information
     sb_info = (struct osfs_sb_info *)memory_region;
     sb_info->magic = OSFS_MAGIC;
-    sb_info->block_size = BLOCK_SIZE;
+    sb_info->block_size = OSFS_BLOCK_SIZE;
     sb_info->inode_count = INODE_COUNT;
     sb_info->block_count = DATA_BLOCK_COUNT;
     sb_info->nr_free_inodes = INODE_COUNT - 1;

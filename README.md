@@ -18,7 +18,7 @@ The labs are separate exercises. The lower panel shows mailbox ownership returni
 | 3: threads and synchronization | Threads update a shared counter, partition matrix work, and expose thread information through procfs | [lab3-threads](lab3-threads) |
 | 4: in-memory filesystem | Files and directories use VFS operations with memory-backed storage, including reads/writes across block boundaries | [lab4-osfs](lab4-osfs) |
 
-The repository contains **Labs 1, 3, and 4**, not the complete course. The Lab 1 sender and receiver compiled on Ubuntu 22.04 under WSL in the local check recorded on 2026-09-28. Runtime behavior and the kernel modules were not validated in that check; no speedup or official score is claimed.
+The repository contains **Labs 1, 3, and 4**, not the complete course. A follow-up validation on 2026-09-29 ran the course exercises in VirtualBox and tested the corrected Lab 4 module on Linux `6.14.0-37-generic`. [Validation results and remaining limits](docs/validation-2026-09-29.md). No speedup or official course score is claimed.
 
 ## Lab 1: one transfer, two IPC mechanisms
 
@@ -79,7 +79,7 @@ The [custom lock](lab3-threads/1_2/1_2.c) uses 1 for unlocked and 0 for locked. 
 
 An old value of 0 retries; an old value of 1 permits the counter update. Unlock exchanges 1 back into the lock. This connects an instruction-level exchange to a thread critical section. Busy waiting consumes CPU under contention, and the x86 inline-assembly constraints need review before reusing this as a general lock. `volatile` alone does not establish portable synchronization.
 
-The `3_2` variant references a missing `3_2_Config.h` and local matrix inputs, so it is not self-contained. Some matrix variants accumulate into `malloc`-allocated output without explicitly zeroing it. Check numerical correctness before comparing execution times.
+The `3_2` Makefile generates `3_2_Config.h` for one or two threads; the local matrix inputs are not included in this repository. Some matrix variants accumulate into `malloc`-allocated output without explicitly zeroing it. The course-input checks passed in the recorded environment, but that does not resolve this source-level concern or prove correctness for every allocation state.
 
 ## Lab 4: files without disk persistence
 
@@ -88,15 +88,25 @@ The `osfs` module connects superblock, inode, directory, and file operations to 
 In [file.c](lab4-osfs/file.c), division selects an extent and the remainder selects the byte position inside it:
 
 ```c
-loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * BLOCK_SIZE);
+loff_t index = *ppos / (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE), offset = *ppos % (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE);
 ```
 
-The [configuration](lab4-osfs/osfs.h) gives each extent two 4,096-byte blocks. A crossing request is split into lengths in `lens`; each copy advances the file position and user-buffer pointer. Reads use `copy_to_user`, writes use `copy_from_user`, and writes synchronize size/timestamp fields with the VFS inode. These operations practice storage addressing and the user/kernel boundary.
+The [configuration](lab4-osfs/osfs.h) gives each extent two 4,096-byte blocks, with two extents per file: **8 KiB per extent and 16 KiB total capacity**. A crossing request is split into lengths in `lens`; each copy advances the file position and user-buffer pointer. Reads use `copy_to_user`, writes use `copy_from_user`, and writes synchronize size/timestamp fields with the VFS inode. These operations practice storage addressing and the user/kernel boundary.
 
-Allocation-return checks, extent-index bounds, and byte counts for oversized requests still need attention. The [extended notes](docs/implementation.md) describe these source-level issues; successful compilation does not establish filesystem reliability.
+The 2026-09-29 fix replaces the generic `BLOCK_SIZE` name with `OSFS_BLOCK_SIZE`. Kernel preprocessing had shown that the old name resolved to 1,024 bytes, silently reducing file capacity to 4 KiB. The write path now checks allocation results, limits requests to capacity, and reports the bytes actually written rather than the original oversized request.
+
+| Runtime check | Result |
+| --- | --- |
+| Basic file creation, write and readback | Pass |
+| 10 KiB write and overwrite across the 8 KiB extent boundary | Pass |
+| Ten consecutive 1 KiB writes | Pass |
+| 16 KiB limit, short writes, EOF and `EFBIG` | Pass |
+| Partial write followed by allocation failure (`ENOSPC`) | Pass |
+
+Readback compares nonzero byte patterns, not just file size. These are targeted checks, not a claim of a production-ready filesystem. [Implementation details](docs/implementation.md#translating-a-file-position-into-an-extent-and-offset) · [Reproduce the tests](lab4-osfs/README.md).
 
 The [original test notes](lab4-osfs/docs/original-test-notes.md) describe mount and file-operation checks. Building needs kernel headers matching the target kernel. Load and test the module only in a disposable Linux VM, not on the host computer.
 
 ## Environment and validation limits
 
-Lab 1's build check did not include a concurrent IPC run. Kernel modules were not loaded. The custom assembly is architecture-dependent, and kernel APIs can differ between releases. Source inspection and archived answers alone do not prove runtime correctness, performance improvement, or kernel stability.
+The follow-up checks include Lab 1 sender/receiver runs, Lab 3 course judges and procfs modules, and the five Lab 4 test groups above. Lab 1 still has an unresolved 1,024-byte payload boundary issue. The custom assembly is architecture-dependent, kernel APIs can differ between releases, and the filesystem has not been validated under concurrent access or arbitrary fault conditions. See the [validation record](docs/validation-2026-09-29.md) for the distinction between course-input results and broader correctness claims.

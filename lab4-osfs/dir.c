@@ -28,7 +28,7 @@ static struct dentry *osfs_lookup(struct inode *dir, struct dentry *dentry, unsi
             (int)dentry->d_name.len, dentry->d_name.name, dir->i_ino);
     for(int index = 0; index < parent_inode->extent_count; index++) {
         // Read the parent directory's data block
-        dir_data_block = sb_info->data_blocks + parent_inode->extents[index].start_block * BLOCK_SIZE;
+        dir_data_block = sb_info->data_blocks + parent_inode->extents[index].start_block * OSFS_BLOCK_SIZE;
 
         // Calculate the number of directory entries
         dir_entry_count = parent_inode->extents[index].file_offset / sizeof(struct osfs_dir_entry);
@@ -80,7 +80,7 @@ static int osfs_iterate(struct file *filp, struct dir_context *ctx)
     //i = ctx->pos - 2;
     
     for(int index = 0; index < osfs_inode->extent_count; index++) {
-        dir_data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * BLOCK_SIZE;
+        dir_data_block = sb_info->data_blocks + osfs_inode->extents[index].start_block * OSFS_BLOCK_SIZE;
         dir_entry_count = osfs_inode->extents[index].file_offset / sizeof(struct osfs_dir_entry);
         dir_entries = (struct osfs_dir_entry *)dir_data_block;
         
@@ -221,7 +221,7 @@ static int osfs_add_dir_entry(struct inode *dir, uint32_t inode_no, const char *
     
     for(int check = 0; check < parent_inode->extent_count; check++)
     {
-        dir_data_block = sb_info->data_blocks + parent_inode->extents[check].start_block * BLOCK_SIZE;
+        dir_data_block = sb_info->data_blocks + parent_inode->extents[check].start_block * OSFS_BLOCK_SIZE;
         dir_entries = (struct osfs_dir_entry *)dir_data_block;
         dir_entry_count = parent_inode->extents[check].file_offset / sizeof(struct osfs_dir_entry);
         // Check if a file with the same name exists
@@ -236,7 +236,7 @@ static int osfs_add_dir_entry(struct inode *dir, uint32_t inode_no, const char *
 
     // Calculate the existing number of directory entries
     dir_entry_count = parent_inode->extents[index].file_offset / sizeof(struct osfs_dir_entry);
-    int edge = (MAX_CONTINUE_BLOCKS * BLOCK_SIZE);
+    int edge = (MAX_CONTINUE_BLOCKS * OSFS_BLOCK_SIZE);
     edge /= sizeof(struct osfs_dir_entry);
     if(dir_entry_count >= edge)
     {
@@ -260,7 +260,7 @@ static int osfs_add_dir_entry(struct inode *dir, uint32_t inode_no, const char *
     }
 
     // Read the parent directory's data block
-    dir_data_block = sb_info->data_blocks + parent_inode->extents[index].start_block * BLOCK_SIZE;
+    dir_data_block = sb_info->data_blocks + parent_inode->extents[index].start_block * OSFS_BLOCK_SIZE;
     dir_entries = (struct osfs_dir_entry *)dir_data_block;
 
     // Add a new directory entry
@@ -304,9 +304,9 @@ static int osfs_create(struct mnt_idmap *idmap, struct inode *dir, struct dentry
         pr_err("osfs_create: File name too long\n");
         return PTR_ERR(inode);
     }
-    else if(BLOCK_SIZE < sizeof(struct osfs_dir_entry))
+    else if(OSFS_BLOCK_SIZE < sizeof(struct osfs_dir_entry))
     {
-        pr_err("osfs_create: BLOCK_SIZE too small\n");
+        pr_err("osfs_create: OSFS_BLOCK_SIZE too small\n");
         return -ENOMEM;
     }
     // Step3: Allocate and initialize VFS & osfs inode
